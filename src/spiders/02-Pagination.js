@@ -5,20 +5,19 @@ const options = {
   defaultViewport: false
 }
 
-async function example () {
-  const browser = await puppeteer.launch(options)
-  const page = await browser.newPage()
+const gotoptions = {
+  waitUntil: 'load'
+}
 
-  await page.goto('https://listado.mercadolibre.com.ar/guitarras#D[A:guitarras]')
-
+async function scrapePage (page) {
   try {
     const data = await page.evaluate(() => {
-      const elements = document.querySelectorAll('.dynamic-carousel__link-container')
+      const elements = document.querySelectorAll('.ui-search-result__wrapper')
 
       const extracted = Array.from(elements).map(e => {
-        const title = e.querySelector('.dynamic-carousel__title')
-        const price = e.querySelector('.dynamic-carousel__price span')
-        const image = e.querySelector('.dynamic-carousel__img')
+        const title = e.querySelector('.ui-search-item__title')
+        const price = e.querySelector('.ui-search-price__part')
+        const image = e.querySelector('.ui-search-result-image__element')
 
         return {
           title: title ? title.textContent.trim() : '',
@@ -30,12 +29,37 @@ async function example () {
       return extracted
     })
 
-    console.log(data)
+    return data
   } catch (error) {
     console.log(error)
+    throw error
   }
-
-  await browser.close()
 }
 
-module.exports = example
+async function pagination () {
+  const browser = await puppeteer.launch(options)
+  const page = await browser.newPage()
+
+  try {
+    await page.goto('https://listado.mercadolibre.com.ar/guitarras#D[A:guitarras]', gotoptions)
+
+    let next = await page.$('.andes-pagination__button--next')
+
+    while (next) {
+      const data = await scrapePage(page)
+      console.log(data, page)
+
+      await next.click()
+
+      await page.waitForNavigation({ waitUntil: 'load', timeout: 60000 })
+
+      next = await page.$('.andes-pagination__button--next')
+    }
+  } catch (error) {
+    console.error(error)
+  } finally {
+    await browser.close()
+  }
+}
+
+module.exports = pagination
